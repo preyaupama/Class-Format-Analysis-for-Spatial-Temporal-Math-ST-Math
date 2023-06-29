@@ -3,11 +3,9 @@ import statsmodels.formula.api as smf
 import pandas
 import sys
 # percentile
-# from numpy import percentile
-# from numpy import std
-# from numpy import mean
-# from numpy import random
-import numpy
+from numpy import percentile
+from numpy import std
+from numpy import mean
 from sklearn.metrics import mean_squared_error
 # for decision tree and regression models
 from sklearn.model_selection import train_test_split
@@ -20,7 +18,7 @@ from sklearn.metrics import classification_report
 from sklearn.feature_selection import RFE
 from sklearn.svm import SVC
 from merf.merf import MERF
-from sklearn.externals import joblib
+
 # to draw decision tree
 from sklearn.externals.six import StringIO  
 from IPython.display import Image  
@@ -195,24 +193,23 @@ data = pandas.read_csv("final_features_revised.csv")
 # performance, perf_rank
 
 # train and test set generation
-data['Z'] = [1] * len(data)
-feature_list_str = "num_prev_sessions + prev_st_math_days + class_size +  start_time_variance + finish_time_variance + disjointedness + class_length + gameplay_duration + num_level_attempts + did_students_practised + practiced_students_frac + max_participant_frac"
-feature_list = ["num_prev_sessions", "prev_st_math_days", "class_size", "start_time_variance", "finish_time_variance", "disjointedness", "class_length", "gameplay_duration", "num_level_attempts", "did_students_practised", "practiced_students_frac", "max_participant_frac"]
+# data['Z'] = [1] * len(data)
+# feature_list_str = "num_prev_sessions + prev_st_math_days + class_size +  start_time_variance + finish_time_variance + disjointedness + class_length + gameplay_duration + num_level_attempts + did_students_practised + practiced_students_frac + max_participant_frac"
+# feature_list = ["num_prev_sessions", "prev_st_math_days", "class_size", "start_time_variance", "finish_time_variance", "disjointedness", "class_length", "gameplay_duration", "num_level_attempts", "did_students_practised", "practiced_students_frac", "max_participant_frac"]
 
-feature_list_melr = ["num_prev_sessions", "prev_st_math_days", "class_size", "start_time_variance", "finish_time_variance", "disjointedness", "class_length", "gameplay_duration", "num_level_attempts", "did_students_practised", "practiced_students_frac", "max_participant_frac", "performance", "final_group", "Z"] 
-X=data[feature_list_melr] # Features
+# feature_list_melr = ["num_prev_sessions", "prev_st_math_days", "class_size", "start_time_variance", "finish_time_variance", "disjointedness", "class_length", "gameplay_duration", "num_level_attempts", "did_students_practised", "practiced_students_frac", "max_participant_frac", "performance", "final_group", "Z"] 
+# X=data[feature_list_melr] # Features
 
-y=data['performance'] # for mixed effect random forest
+# y=data['performance'] # for mixed effect random forest
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
-x_train = X_train[["num_prev_sessions", "prev_st_math_days", "class_size", "start_time_variance", "finish_time_variance", "disjointedness", "class_length", "gameplay_duration", "num_level_attempts", "did_students_practised", "practiced_students_frac", "max_participant_frac"]]
-Z_train = X_train[["Z"]]
-clusters_train = X_train["final_group"]
+# X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
+# x_train = X_train[["num_prev_sessions", "prev_st_math_days", "class_size", "start_time_variance", "finish_time_variance", "disjointedness", "class_length", "gameplay_duration", "num_level_attempts", "did_students_practised", "practiced_students_frac", "max_participant_frac"]]
+# Z_train = X_train[["Z"]]
+# clusters_train = X_train["final_group"]
 
-x_test = X_test[["num_prev_sessions", "prev_st_math_days", "class_size", "start_time_variance", "finish_time_variance", "disjointedness", "class_length", "gameplay_duration", "num_level_attempts", "did_students_practised", "practiced_students_frac", "max_participant_frac"]]
-Z_test = X_test[["Z"]]
-clusters_test = X_test["final_group"]
-X_test.to_csv("test.csv",index=False)
+# x_test = X_test[["num_prev_sessions", "prev_st_math_days", "class_size", "start_time_variance", "finish_time_variance", "disjointedness", "class_length", "gameplay_duration", "num_level_attempts", "did_students_practised", "practiced_students_frac", "max_participant_frac"]]
+# Z_test = X_test[["Z"]]
+# clusters_test = X_test["final_group"]
 
 # mixed effect linear regression
 # formula = "performance ~ " + feature_list_str
@@ -229,30 +226,11 @@ X_test.to_csv("test.csv",index=False)
 
 # mixed effect random forest
 
-mrf = MERF()
-mrf_model = mrf.fit(x_train, Z_train, clusters_train, y_train)
+# mrf = MERF()
+# mrf_model = mrf.fit(x_train, Z_train, clusters_train, y_train)
 
-mrf_predictions = mrf.predict(x_test, Z_test, clusters_test)
-print("MERF MSE:"+str(mean_squared_error(y_test,mrf_predictions)))
-# joblib.dump(mrf_model,'Data/fs_model-lr.pkl')
-
-
-orig_mse = mean_squared_error(y_test,mrf_predictions)
-for i in range(len(feature_list)):
-    dup_x_test = x_test
-    feature_name = feature_list[i]
-    x = x_test[feature_name]
-    mu = numpy.mean(x)
-    sigma = numpy.std(x)
-    noise = numpy.random.normal(mu, sigma, x.shape[0]).reshape(x.shape)
-    dup_x_test[feature_name] = noise
-    y_pred = mrf.predict(dup_x_test, Z_test, clusters_test)
-    mse = mean_squared_error(y_test, y_pred)
-    percent_inc = (mse - orig_mse)/orig_mse
-    print(feature_name)
-    print(percent_inc)
-
-sys.exit(0)
+# mrf_predictions = mrf.predict(x_test, Z_test, clusters_test)
+# print("MERF MSE:"+str(mean_squared_error(y_test,mrf_predictions)))
 
 # data_to_plot = {'y_true':y_test, 'MELR_predictions':predictions,'MERF_predictions':mrf_predictions}
 # df_to_plot = pandas.DataFrame(data_to_plot) 
@@ -291,15 +269,15 @@ sys.exit(0)
 ################################################## 
 
 # feature_list = ["num_prev_sessions", "prev_st_math_days", "class_size", "start_time_variance", "finish_time_variance", "disjointedness", "class_length", "gameplay_duration", "num_level_attempts", "did_students_practised", "practiced_students_frac", "max_participant_frac"]
-feature_list = ["gameplay_duration","num_level_attempts","num_prev_sessions","max_participant_frac","practiced_students_frac","finish_time_variance"]
+
 # X=data[feature_list]  
 # y=data['perf_rank_bin']
 # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
 print("final:################################################################################################################")
 # random forest
 print("average")
-# feature_list = ["gameplay_duration","num_level_attempts","finish_time_variance","class_length","start_time_variance","num_prev_sessions","prev_st_math_days","max_participant_frac","class_size","practiced_students_frac","did_students_practised","disjointedness"]
-# feature_list = ["gameplay_duration", "num_level_attempts","class_length", "finish_time_variance", "start_time_variance","num_prev_sessions","max_participant_frac"]
+feature_list = ["gameplay_duration","num_level_attempts","finish_time_variance","class_length","start_time_variance","num_prev_sessions","prev_st_math_days","max_participant_frac","class_size","practiced_students_frac","did_students_practised","disjointedness"]
+feature_list = ["gameplay_duration","num_level_attempts","finish_time_variance","max_participant_frac"]
 
 X=data[feature_list]  
 y=data['perf_rank_bin']
@@ -317,8 +295,8 @@ print(feature_imp)
 
 # ADA boost
 print('Ada boost')
-# feature_list = ["gameplay_duration","num_level_attempts","finish_time_variance","class_length","start_time_variance","num_prev_sessions","prev_st_math_days","max_participant_frac","class_size","practiced_students_frac","did_students_practised","disjointedness"]
-# feature_list = ["finish_time_variance","gameplay_duration", "num_level_attempts", "num_prev_sessions","practiced_students_frac","max_participant_frac"]
+feature_list = ["gameplay_duration","num_level_attempts","finish_time_variance","class_length","start_time_variance","num_prev_sessions","prev_st_math_days","max_participant_frac","class_size","practiced_students_frac","did_students_practised","disjointedness"]
+feature_list = ["gameplay_duration","num_level_attempts","max_participant_frac","num_prev_sessions","practiced_students_frac","finish_time_variance"]
 X=data[feature_list]  
 y=data['perf_rank_bin']
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
@@ -334,8 +312,8 @@ print(feature_imp)
 
 # gradient boosting
 print("gradient boosting")
-# feature_list = ["gameplay_duration","num_level_attempts","finish_time_variance","class_length","start_time_variance","num_prev_sessions","prev_st_math_days","max_participant_frac","class_size","practiced_students_frac","did_students_practised","disjointedness"]
-# feature_list = ["gameplay_duration", "finish_time_variance", "class_length","num_level_attempts", "num_prev_sessions","practiced_students_frac"]
+feature_list = ["gameplay_duration","num_level_attempts","finish_time_variance","class_length","start_time_variance","num_prev_sessions","prev_st_math_days","max_participant_frac","class_size","practiced_students_frac","did_students_practised","disjointedness"]
+feature_list = ["gameplay_duration","num_level_attempts","finish_time_variance","max_participant_frac"]
 X=data[feature_list]  
 y=data['perf_rank_bin']
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
@@ -350,7 +328,7 @@ print(feature_imp)
 
 # decision tree
 print("decision tree")
-# feature_list = ["gameplay_duration","num_level_attempts","max_participant_frac"]
+feature_list = ["gameplay_duration","num_level_attempts","max_participant_frac"]
 X=data[feature_list]  
 y=data['perf_rank_bin']
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
@@ -375,16 +353,16 @@ print(feature_imp)
 # logistic regression
 print("logistic")
 
-# feature_list = ["did_students_practised","disjointedness","practiced_students_frac","num_level_attempts","gameplay_duration","max_participant_frac","class_size","class_length","prev_st_math_days","start_time_variance", "finish_time_variance","num_prev_sessions"]
-# #feature_list = ["did_students_practised","disjointedness","practiced_students_frac","num_level_attempts","gameplay_duration","max_participant_frac"]
-# feature_list = ["did_students_practised", "disjointedness", "practiced_students_frac", "num_level_attempts","gameplay_duration", "max_participant_frac"]
+feature_list = ["did_students_practised","disjointedness","practiced_students_frac","num_level_attempts","gameplay_duration","max_participant_frac","class_size","class_length","prev_st_math_days","start_time_variance", "finish_time_variance","num_prev_sessions"]
+#feature_list = ["did_students_practised","disjointedness","practiced_students_frac","num_level_attempts","gameplay_duration","max_participant_frac"]
+feature_list = ["gameplay_duration","num_level_attempts","max_participant_frac"]
 X=data[feature_list]  
 y=data['perf_rank_bin']
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
 # create an instance and fit the model 
 print("LogisticRegression:")
 logmodel = LogisticRegression()
-rfe = RFE(logmodel, 6)
+rfe = RFE(logmodel, 3)
 model = rfe.fit(X_train, y_train)
 predictions = model.predict(X_test)
 print(classification_report(y_test,predictions))
