@@ -1,0 +1,258 @@
+import os
+import pandas
+import iso8601
+import sys
+import csv
+
+districts = ['DC'] # list of districts we want to include in our analysis
+years = ['2014','2015','2016','2017'] # list of years we want to include in our analysis
+
+root = 'D:\\upama_desktop\\Summer_2019\\MIND_Data\\class_format_data' # folder that will contain data from all the district and years
+
+# get student level data(iid, grade, stmath_user_id)
+student_info_dict = dict()
+# read the student level data
+print("Getting student info...")
+csv_file = 'D:\\upama_desktop\\Summer_2019\\MIND_Data\\cleaned_merged_student_info.csv' # path to student info file
+student_info_df = pandas.read_csv(csv_file, index_col="student_entity_id")
+# for chunk in pandas.read_csv(csv_file, chunksize=1000, iterator=True, index_col='student_entity_id'):
+for row in student_info_df.itertuples():
+    student_info_dict[row.Index] = (row.iid, row.gcd, row.stmath_user_id, row.teacher_entity_id)
+del student_info_df
+
+
+def preprocessing(file_path, district, year, file_name):
+    print("Initializing...")
+    new_df = pandas.read_csv(file_path, index_col="student_entity_id") # read the data in a dataframe
+    # dictionaries to keep necessary info in memory
+    level_attempt_count_dict = dict() # this dictionary will contain the count for each unique student_entity_id and timestamp pair occurances
+    attempt_number_dict = dict() # this dictionary keeps count for attempts taken for a particular level by a student
+
+    # new features
+    failed = list() # if the current row contains data for a failed level attempt
+    performance = list() # performance in the level attempt
+    X1 = list() # X1 will be used to sort the data if the data is jumbled for some reason 
+    python_time = list() # the time_level_attempt_started is converted to python_time for ease of sortimg 
+    attempt_number_checked = list() # stores the new attempt count
+    iid = list() # institution id of a student
+    gcd = list() # grade of a student
+    stmath_user_id = list() # stmath_user_id of a student
+    teacher_entity_id = list() # teacher entity id for a student
+
+    missing_students_list = list() # contain a list of students whose basic info is missing
+
+    missing_student_info_file = open('info\\missing_student_info.txt', 'a') # list down students whose basic info are missing
+    inconsistent_data_file = open('info\\inconsistent_data.txt', 'a') #  list down inconsistent data
+    duplicate_info_file = open('info\\duplicate_info.txt','a') # list down the percentage of duplicates found in a file
+
+    # write the name of the file under consideration
+    missing_student_info_file.write("\nFile name:"+file_name+"\n")
+    inconsistent_data_file.write("\nFile name:"+file_name+"\n")
+    duplicate_info_file.write("\nFile name:"+file_name+"\n")
+
+
+    # 1. check for duplicates
+    # row_count = 0
+    # for row in new_df.itertuples(): # this loop runs for each row
+    #     if level_attempt_count_dict.get(row.Index) is None: # index must be student_entity_id and time_level_attempt_started
+    #         level_attempt_count_dict[row.Index] = (1, row) # first occurance of the student-timestamp pair
+        
+    #     else:         
+    #         level_attempt_count_dict[row.Index] = (level_attempt_count_dict[row.Index][0] + 1, level_attempt_count_dict[row.Index][1]) # increment the count
+    
+    #     if level_attempt_count_dict[row.Index][0] > 1:
+    #         print("Duplicate found!!!")
+    #         print(row)
+    #         print(level_attempt_count_dict[row.Index][1])
+    #         print("\n")
+        
+    #     else:
+    #         print(row_count)
+
+    #     row_count = row_count + 1  
+    # ask Dr. Rutherford what to do about duplicates
+
+    # 2. remove duplicates
+    print("Removing Duplicates...")
+    prev_len = len(new_df)
+    ##################################drop_duplicates has bug - using alternate############################################
+    # new_df = new_df.drop_duplicates(keep = 'first', inplace=False)
+    seen_data = dict()
+    drop = list()
+    for row in new_df.itertuples():
+        if seen_data.get(row) is None:
+            drop.append(0)
+            seen_data[row] = 1
+        else:
+            drop.append(1)
+    del seen_data
+    new_df['drop'] = drop
+    new_df=new_df.loc[new_df['drop'] == 0]
+    del new_df['drop']
+    #######################################################################################################################
+    new_len = len(new_df)
+    dup_percnt = ((prev_len-new_len)/prev_len)
+    dup_info = "Duplicate:"+str(dup_percnt)+"%\n"
+    duplicate_info_file.write(dup_info)
+
+    # 3. check again for duplicates
+    # row_count = 0
+    # for row in new_df.itertuples(): # this loop runs for each row
+    #     if level_attempt_count_dict.get(row.Index) is None:
+    #         level_attempt_count_dict[row.Index] = (1, row) # first occurance of the student-timestamp pair
+        
+    #     else:         
+    #         level_attempt_count_dict[row.Index] = (level_attempt_count_dict[row.Index][0] + 1, level_attempt_count_dict[row.Index][1]) # increment the count
+    
+    #     if level_attempt_count_dict[row.Index][0] > 1:
+    #         print("Duplicate found!!!")
+    #         print(row)
+    #         print(level_attempt_count_dict[row.Index][1])
+    #         print("\n")
+        
+    #     else:
+    #         print(row_count)
+
+    #     row_count = row_count + 1
+    
+    # 4. check and count micellaneous duplicates
+    print("Checking Cleaning Process...")
+    mic_duplicates = len(new_df.pivot_table(index=['student_entity_id','time_level_attempt_started'], aggfunc='size'))
+    mic_dup_info = "Other duplicates:"+str(((len(new_df)-mic_duplicates)/len(new_df))*100)+"%\n"
+    duplicate_info_file.write(mic_dup_info)
+
+
+    # 6. failed flag , timestamp, X1 and performance
+    print("Creating new features...")
+    row_number = 0
+    inconsistent_row_count = 0
+    for row in new_df.itertuples(): # this loop runs for each row
+        row_number = row_number + 1 # increment row number
+        X1.append(row_number) # store the row number
+        if row.puzzles_passed != row.puzzles_total:
+            failed.append(1) # if the number of puzzles passes is not equals to number of total puzzles, the student has failed
+        else:
+            failed.append(0)
+        if row.puzzles_total != 0:
+            performance.append(round(row.puzzles_passed/row.puzzles_total, 3)) # performance rounded to 3 digits
+        else:
+            inconsistent_row_count = inconsistent_row_count + 1
+            inconsistent_data_file.write(str(row) + "\n")
+            performance.append(0)
+
+        # timezone conversion- converted time_level_attempt_started will be stored in a new column named python_time
+        python_time.append(iso8601.parse_date(row.time_level_attempt_started))
+
+        if student_info_dict.get(row.Index) is None: # if student info is not found append the student_entity_id to missing_students_list and assign None to corresponding columns
+            if row.Index not in missing_students_list:
+                missing_students_list.append(row.Index)
+            iid.append(None)
+            gcd.append(None)
+            stmath_user_id.append(None)
+            teacher_entity_id.append(None)
+        else: # if student info is found assign them to corresponding columns
+            iid.append(student_info_dict[row.Index][0])
+            gcd.append(student_info_dict[row.Index][1])
+            stmath_user_id.append(student_info_dict[row.Index][2])
+            teacher_entity_id.append(student_info_dict[row.Index][3])
+
+    
+    # write the files and close them
+    inconsistent_info = "Inconsistency in cleaned file:"+str((inconsistent_row_count/len(new_df))*100)+"%\n"
+    duplicate_info_file.write(inconsistent_info)
+    missing_student_info_file.write(str(missing_students_list) + "\n")
+    missing_student_info_file.close()
+    inconsistent_data_file.close()
+    duplicate_info_file.close()
+
+    # add the features to the dataframe
+    new_df['failed'] = failed
+    new_df['performance'] = performance
+    new_df['X1'] = X1
+    new_df['python_time'] = python_time
+    new_df['iid'] = iid
+    new_df['gcd'] = gcd
+    new_df['stmath_user_id'] = stmath_user_id
+    new_df['teacher_entity_id'] = teacher_entity_id
+
+
+    # 7. do this after duplicate removal
+    ######################################################################################################################################
+    # check number of attempts
+    print("Checking number of attempts...")
+    # sort on the basis of timestamp
+    new_df.sort_values('python_time')
+    # count attempt number
+    for row in new_df.itertuples(): # this loop runs for each row
+        attempt_key = row.Index + str(row.objective_index) + str(row.game_number_in_objective) + str(row.level_number_in_objective)
+        if attempt_number_dict.get(attempt_key) is None:
+            attempt_number_dict[attempt_key] = 1
+            attempt_number_checked.append(1)
+        else:
+            attempt_number_dict[attempt_key] = attempt_number_dict[attempt_key] + 1
+            attempt_number_checked.append(attempt_number_dict[attempt_key])
+    # sort on the basis of x1
+    new_df.sort_values('X1') # retain original sequence
+    # append thr column attempt_number_checked
+    new_df['attempt_number_checked'] = attempt_number_checked
+
+    # 8. Save the data to a new csv with same name
+    print("Saving data to csv...")
+    output_filename = 'preprocessed_data\\' + district + '\\' + year +'\\' + file_name
+    new_df.to_csv(output_filename)
+    print("Done...")
+    #######################################################################################################################################    
+
+
+
+# Run preprocessing Tasks
+# for district in districts:
+#     for year in years:
+#         path = root + '\\'+district+'\\'+year+'\\' # a folder is needed to store the data from different institutions of each district and year
+#         files = os.listdir(path) # get the list of files under district and year folder
+#         for file in files:
+#             file_path = path + file # set the path to corresponding institution file
+#             # command = 'python preprocess.py ' + file_path + ' ' + district + ' ' + year + ' ' + file
+#             # os.system(command)
+#             preprocessing(file_path,district,year,file)
+            
+
+# setup the results directory-run only once
+# output_directory = 'D:\\upama_desktop\\Summer_2019\\scripts\\analysis\\results\\'
+# fields = ['district','year','iid','gcd','teacher_entity_id', 'old_session_num','session','date','session_hour','num_students_class','participation', 'lab_seating','free_seating','home_login_exist', 'high_time_variance', 'segmented_class', 'rotation','others','session_duration','session_len','performance','max_participent']
+# files_od = os.listdir(output_directory)
+# for file in files_od:
+#     path = output_directory+file
+#     with open(path, mode='a') as car:
+#         writer = csv.writer(car)
+#         writer.writerow(fields)
+    
+# Mark new sessions
+print("Marking New Sessions...")
+root_ = 'D:\\upama_desktop\\Summer_2019\\scripts\\analysis\\preprocessed_data'
+for district in districts:
+    for year in years:
+        path = root_ + '\\'+district+'\\'+year+'\\' # a folder is needed to store the data from different institutions of each district and year
+        files = os.listdir(path) # get the list of files under district and year folder
+        for file in files:
+            print(file)
+            file_path = path + file # set the path to corresponding institution file
+            command = 'python mark_new_session.py ' + file_path
+            os.system(command)
+
+# print("Starting Analysis...")
+# root_ = 'D:\\upama_desktop\\Summer_2019\\scripts\\analysis\\preprocessed_data'
+# for district in districts:
+#     for year in years:
+#         path = root_ + '\\'+district+'\\'+year+'\\' # a folder is needed to store the data from different institutions of each district and year
+#         files = os.listdir(path) # get the list of files under district and year folder
+#         for file in files:
+#             print(file)
+#             file_path = path + file # set the path to corresponding institution file
+#             command = 'python analysis_.py ' + file_path + ' ' + district + ' ' + year + ' ' + file
+#             os.system(command)
+#             break
+#         break
+#     break
+            
+print("Done**************************************************************************")
